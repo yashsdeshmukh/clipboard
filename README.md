@@ -38,3 +38,32 @@ public class FileController {
     }
 }
 
+public class FileUploadController {
+
+    @PostMapping("/upload")
+    @ApiOperation(value = "Upload a file")
+    public ResponseEntity<String> handleFileUpload(@RequestParam("file") MultipartFile file) {
+        try {
+            // Specify the target directory
+            Path targetDirectory = Path.of("path/to/your/target/directory");
+
+            // Check if the target directory exists, create it if not
+            if (!Files.exists(targetDirectory)) {
+                Files.createDirectories(targetDirectory);
+            }
+
+            // Resolve the target path by combining the target directory with the file name
+            Path targetPath = targetDirectory.resolve(file.getOriginalFilename());
+
+            // Copy the file to the target directory, replacing existing file
+            Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
+
+            // Return a success message
+            return ResponseEntity.ok("File uploaded successfully at: " + targetPath);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body("Error uploading the file");
+        }
+    }
+}
+
