@@ -99,3 +99,35 @@ public class MyControllerTest {
     }
 }
 
+@Test
+    public void testDownloadFile() throws Exception {
+        // Mock the ProcessBuilder behavior
+        Process processMock = Mockito.mock(Process.class);
+        Mockito.when(processMock.waitFor()).thenReturn(0); // Mock successful command execution
+        Mockito.when(processBuilder.start()).thenReturn(processMock);
+
+        // Mock the file path and content for the UrlResource
+        Path filePath = Paths.get("/path/to/created/file.txt");
+        String fileContent = "Mock file content";
+        String fileName = "file.txt";
+        UrlResource urlResourceMock = Mockito.mock(UrlResource.class);
+        Mockito.when(urlResourceMock.getFilename()).thenReturn(fileName);
+        Mockito.when(urlResourceMock.getInputStream()).thenReturn(new ByteArrayInputStream(fileContent.getBytes()));
+        Mockito.when(urlResourceMock.exists()).thenReturn(true);
+
+        // Mock the UrlResource creation
+        Mockito.when(new UrlResource(filePath.toUri())).thenReturn(urlResourceMock);
+
+        // Perform the GET request
+        MvcResult mvcResult = mockMvc.perform(MockMvcRequestBuilders.get("/api/downloadFile"))
+                .andExpect(MockMvcResultMatchers.status().isOk())
+                .andExpect(MockMvcResultMatchers.header().string(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + fileName))
+                .andReturn();
+
+        // Assert that the response contains the expected content
+        MockHttpServletResponse response = mvcResult.getResponse();
+        Assert.assertEquals(fileContent, response.getContentAsString());
+
+        // You may add more assertions based on your specific requirements
+    }
+
