@@ -67,3 +67,35 @@ public class FileUploadController {
     }
 }
 
+@RunWith(SpringRunner.class)
+@WebMvcTest(MyController.class)
+public class MyControllerTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @MockBean
+    private ProcessBuilder processBuilder; // Mock ProcessBuilder
+
+    @Test
+    public void testDownloadFile() throws Exception {
+        // Mock the ProcessBuilder behavior
+        Process processMock = Mockito.mock(Process.class);
+        Mockito.when(processMock.waitFor()).thenReturn(0); // Mock successful command execution
+
+        Mockito.when(processBuilder.start()).thenReturn(processMock);
+
+        // Perform the GET request
+        MvcResult mvcResult = mockMvc.perform(MockMvcRequestBuilders.get("/api/downloadFile"))
+                .andExpect(MockMvcResultMatchers.status().isOk())
+                .andExpect(MockMvcResultMatchers.header().string(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=file.txt"))
+                .andReturn();
+
+        // Assert that the response contains the expected content
+        MockHttpServletResponse response = mvcResult.getResponse();
+        Assert.assertNotNull(response.getContentAsString());
+
+        // You may add more assertions based on your specific requirements
+    }
+}
+
