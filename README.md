@@ -131,3 +131,142 @@ public class MyControllerTest {
         // You may add more assertions based on your specific requirements
     }
 
+
+Service Invoker - 
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+
+public class ServiceInvoker {
+    public static void main(String[] args) {
+        String inputFilePath = "input.txt";
+        String outputFilePath = "output.txt";
+        int batchSize = 1000; // Adjust batch size based on your requirements
+
+        try {
+            CompletableFuture<List<String>> readFuture = Reader.readLinesAsync(inputFilePath);
+            readFuture.thenApply(lines -> processBatches(lines, batchSize))
+                    .thenCompose(batches -> CompletableFuture.allOf(
+                            batches.stream()
+                                    .map(batch -> batch.thenCompose(Parser::parseLinesAsync)
+                                            .thenCompose(Transformer::transformLinesAsync)
+                                            .thenCompose(transformedLines -> Writer.writeLinesAsync(transformedLines, outputFilePath)))
+                                    .toArray(CompletableFuture[]::new)))
+                    .thenAccept(result -> System.out.println("Processing complete."))
+                    .exceptionally(e -> {
+                        e.printStackTrace();
+                        return null;
+                    })
+                    .join();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static List<CompletableFuture<List<String>>> processBatches(List<String> lines, int batchSize) {
+        List<CompletableFuture<List<String>>> batches = new ArrayList<>();
+        for (int i = 0; i < lines.size(); i += batchSize) {
+            List<String> batch = lines.subList(i, Math.min(i + batchSize, lines.size()));
+            batches.add(CompletableFuture.completedFuture(batch));
+        }
+        return batches;
+    }
+}
+
+
+Writer - 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+
+public class Writer {
+    public static CompletableFuture<Void> writeLinesAsync(List<String> transformedLines, String filePath) {
+        return CompletableFuture.runAsync(() -> {
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath))) {
+                for (String line : transformedLines) {
+                    writer.write(line);
+                    writer.newLine();
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Error writing file", e);
+            }
+        });
+    }
+}
+
+Transformer - 
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+
+public class Transformer {
+    public static CompletableFuture<List<String>> transformLinesAsync(List<String[]> parsedLines) {
+        return CompletableFuture.supplyAsync(() -> {
+            List<String> transformedLines = new ArrayList<>();
+            for (String[] tokens : parsedLines) {
+                StringBuilder transformedLine = new StringBuilder();
+                for (String token : tokens) {
+                    // Assuming token format is "tag=value"
+                    String[] parts = token.split("=");
+                    String tag = parts[0];
+                    String value = parts[1];
+                    // Transformation logic based on tag
+                    if (tag.equals("35")) {
+                        // Example transformation for tag 35
+                        value = "NEW_" + value;
+                    }
+                    transformedLine.append(tag).append("=").append(value).append("^A");
+                }
+                transformedLines.add(transformedLine.toString());
+            }
+            return transformedLines;
+        });
+    }
+}
+
+Parser - 
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+
+public class Parser {
+    public static CompletableFuture<List<String[]>> parseLinesAsync(List<String> lines) {
+        return CompletableFuture.supplyAsync(() -> {
+            List<String[]> parsedLines = new ArrayList<>();
+            for (String line : lines) {
+                String[] tokens = line.split("\u0001");
+                parsedLines.add(tokens);
+            }
+            return parsedLines;
+        });
+    }
+}
+
+Reader -
+
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+
+public class Reader {
+    public static CompletableFuture<List<String>> readLinesAsync(String filePath) {
+        return CompletableFuture.supplyAsync(() -> {
+            List<String> lines = new ArrayList<>();
+            try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    lines.add(line);
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Error reading file", e);
+            }
+            return lines;
+        });
+    }
+}
+
+
