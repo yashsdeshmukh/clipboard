@@ -270,3 +270,97 @@ public class Reader {
 }
 
 
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.serialization.ByteArrayDeserializer;
+import org.apache.avro.generic.GenericRecord;
+import org.apache.avro.io.DatumReader;
+import org.apache.avro.io.Decoder;
+import org.apache.avro.io.DecoderFactory;
+import org.apache.avro.specific.SpecificDatumReader;
+import org.apache.avro.Schema;
+
+import java.time.Duration;
+import java.util.Collections;
+import java.util.Properties;
+import java.util.Scanner;
+
+public class KafkaAvroConsumer {
+
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+
+        while (true) {
+            // User input for Kafka topic and schema registry URL
+            System.out.print("Enter Kafka topic (or 'exit' to quit): ");
+            String topic = scanner.nextLine();
+            if (topic.equalsIgnoreCase("exit")) {
+                break;
+            }
+            System.out.print("Enter Avro schema (as JSON string): ");
+            String schemaString = scanner.nextLine();
+            System.out.print("Enter rowkey value to filter: ");
+            String rowkeyFilter = scanner.nextLine();
+
+            // Parse the provided Avro schema
+            Schema schema = new Schema.Parser().parse(schemaString);
+
+            // Set Kafka consumer properties
+            Properties properties = new Properties();
+            properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");  // Adjust if needed
+            properties.put(ConsumerConfig.GROUP_ID_CONFIG, "avro-consumer-group");
+            properties.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
+            properties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
+
+            // Create Kafka consumer
+            KafkaConsumer<byte[], byte[]> consumer = new KafkaConsumer<>(properties);
+
+            // Subscribe to the topic
+            consumer.subscribe(Collections.singletonList(topic));
+
+            // Poll and process records
+            try {
+                final long maxIdleTimeMillis = 30000;  // Adjust the idle time as needed
+                long lastPollTime = System.currentTimeMillis();
+
+                while (true) {
+                    ConsumerRecords<byte[], byte[]> records = consumer.poll(Duration.ofMillis(100));
+
+                    if (records.isEmpty()) {
+                        if (System.currentTimeMillis() - lastPollTime > maxIdleTimeMillis) {
+                            System.out.println("No new records for " + (maxIdleTimeMillis / 1000) + " seconds. Exiting...");
+                            break;
+                        }
+                    } else {
+                        lastPollTime = System.currentTimeMillis();
+
+                        for (ConsumerRecord<byte[], byte[]> record : records) {
+                            // Check the header for rowkey
+                            String rowkey = record.headers().lastHeader("rowkey") != null
+                                    ? new String(record.headers().lastHeader("rowkey").value())
+                                    : null;
+
+                            if (rowkey != null && rowkey.equals(rowkeyFilter)) {
+                                // Deserialize the Avro record
+                                DatumReader<GenericRecord> datumReader = new SpecificDatumReader<>(schema);
+                                Decoder decoder = DecoderFactory.get().binaryDecoder(record.value(), null);
+                                GenericRecord avroRecord = datumReader.read(null, decoder);
+
+                                System.out.println("Filtered Record: " + avroRecord);
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            } finally {
+                consumer.close();
+            }
+        }
+        scanner.close();
+    }
+}
+
+
